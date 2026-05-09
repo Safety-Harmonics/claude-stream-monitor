@@ -42,47 +42,41 @@ class StatusBar(Static):
     """
 
     def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self._phase_num    = "—"
-        self._phase_label  = "Waiting for session…"
-        self._ticket       = ""
-        self._session_id   = ""
-        self._elapsed      = 0.0
-        self._cost         = 0.0
+        super().__init__("Waiting for session…", **kwargs)
+        self._phase_num     = "—"
+        self._phase_label   = "Waiting for session…"
+        self._ticket        = ""
+        self._session_id    = ""
+        self._elapsed       = 0.0
+        self._cost          = 0.0
         self._input_tokens  = 0
         self._output_tokens = 0
 
     def update_state(self, **kwargs) -> None:
         for k, v in kwargs.items():
             setattr(self, f"_{k}", v)
-        self.refresh()
+        self._refresh_display()
 
-    def render(self) -> Text:
+    def _refresh_display(self) -> None:
         color = PHASE_COLORS.get(self._phase_num, "white")
         t = Text(no_wrap=True, overflow="ellipsis")
-
         t.append(" ◆ ", style=f"bold {color}")
         t.append(f"Phase {self._phase_num}", style=f"bold {color}")
         t.append(f"  {self._phase_label}", style=color)
-
         if self._ticket:
             t.append("   │   ", style="dim")
             t.append(self._ticket, style="bold yellow")
-
         if self._session_id:
             t.append("   │   ", style="dim")
             t.append(f"session:{self._session_id[:8]}…", style="dim")
-
         t.append("   │   ", style="dim")
         elapsed = int(self._elapsed)
         h, m, s = elapsed // 3600, (elapsed % 3600) // 60, elapsed % 60
         t.append(f"{h:02d}:{m:02d}:{s:02d}", style="dim")
-
         t.append("   │   ", style="dim")
         t.append(f"${self._cost:.4f}", style="bold green")
         t.append(f"  ↑{self._input_tokens:,} ↓{self._output_tokens:,}", style="dim")
-
-        return t
+        self.update(t)
 
 
 class MonitorApp(App):
@@ -144,7 +138,8 @@ class MonitorApp(App):
 
     def _tick_elapsed(self) -> None:
         status = self.query_one("#status", StatusBar)
-        status.update_state(elapsed=time.monotonic() - self._start_time)
+        status._elapsed = time.monotonic() - self._start_time
+        status._refresh_display()
 
     def ingest_line(self, line: str) -> None:
         if self._log_file:
