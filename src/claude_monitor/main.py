@@ -17,6 +17,7 @@ from pathlib import Path
 import click
 
 from claude_monitor.app import MonitorApp
+from claude_monitor.plain import run_plain
 
 
 def _stream_stdin(app: MonitorApp) -> None:
@@ -58,11 +59,18 @@ def _stream_stdin(app: MonitorApp) -> None:
     default=False,
     help="Disable log file writing",
 )
+@click.option(
+    "--plain",
+    is_flag=True,
+    default=False,
+    help="Plain text mode — no TUI, formatted stdout only",
+)
 def main(
     log_dir: Path | None,
     log_file: Path | None,
     replay: bool,
     no_log: bool,
+    plain: bool,
 ) -> None:
     """
     TUI monitor for Claude Code --output-format stream-json output.
@@ -85,6 +93,10 @@ def main(
             base = log_dir or Path("logs")
             timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
             resolved_log = base / f"agent-{timestamp}.jsonl"
+
+    if plain:
+        run_plain(resolved_log)
+        return
 
     app = MonitorApp(log_path=resolved_log, replay=replay)
 
