@@ -118,6 +118,8 @@ class MonitorApp(App):
         self._paused = False
         self._autoscroll = True
         self._replay = replay
+        self._ready = False          # set True after on_mount completes
+        self._pre_mount_queue: list[str] = []  # lines received before ready
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -130,6 +132,11 @@ class MonitorApp(App):
             self._log_path.parent.mkdir(parents=True, exist_ok=True)
             self._log_file = open(self._log_path, "a", buffering=1)
         self.set_interval(1.0, self._tick_elapsed)
+        self._ready = True
+        # Drain anything that arrived before we were ready
+        for line in self._pre_mount_queue:
+            self._process_line(line)
+        self._pre_mount_queue.clear()
 
     def on_unmount(self) -> None:
         if self._log_file:
@@ -142,7 +149,12 @@ class MonitorApp(App):
     def ingest_line(self, line: str) -> None:
         if self._log_file:
             self._log_file.write(line + "\n")
+        if not self._ready:
+            self._pre_mount_queue.append(line)
+            return
+        self._process_line(line)
 
+    def _process_line(self, line: str) -> None:
         try:
             events = self._parser.feed(line)
         except Exception as e:
@@ -152,8 +164,12 @@ class MonitorApp(App):
         if self._paused:
             return
 
-        status = self.query_one("#status", StatusBar)
-        feed = self.query_one("#feed", FeedLog)
+        try:
+            status = self.query_one("#status", StatusBar)
+            feed = self.query_one("#feed", FeedLog)
+        except Exception as e:
+            self._write_error(f"Widget query failed: {e}")
+            return
 
         for event in events:
             try:
