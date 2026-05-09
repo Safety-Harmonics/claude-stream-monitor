@@ -24,7 +24,7 @@ TOOL_COLORS = {
     "WebSearch": "bold blue",
 }
 
-MAX_RESULT_LINES = 20
+MAX_RESULT_LINES = 50
 
 
 class FeedLog(RichLog):

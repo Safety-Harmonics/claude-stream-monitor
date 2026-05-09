@@ -23,7 +23,7 @@ TOOL_COLORS = {
     "Grep": "magenta", "Glob": "magenta", "Agent": "green",
 }
 
-MAX_RESULT_LINES = 15
+MAX_RESULT_LINES = 50
 
 
 def run_plain(log_path: Path | None) -> None:
