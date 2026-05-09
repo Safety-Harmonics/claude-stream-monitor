@@ -143,7 +143,12 @@ class MonitorApp(App):
         if self._log_file:
             self._log_file.write(line + "\n")
 
-        events = self._parser.feed(line)
+        try:
+            events = self._parser.feed(line)
+        except Exception as e:
+            self._write_error(f"Parser error: {e} | line: {line[:120]}")
+            return
+
         if self._paused:
             return
 
@@ -151,8 +156,18 @@ class MonitorApp(App):
         feed = self.query_one("#feed", FeedLog)
 
         for event in events:
-            self._apply_status(status, event)
-            feed.push_event(event)
+            try:
+                self._apply_status(status, event)
+                feed.push_event(event)
+            except Exception as e:
+                self._write_error(f"Render error [{event.kind}]: {e}")
+
+    def _write_error(self, msg: str) -> None:
+        try:
+            feed = self.query_one("#feed", FeedLog)
+            feed.write(Text(f"⚠ {msg}", style="bold red"))
+        except Exception:
+            pass  # If even this fails, silently ignore
 
     def _apply_status(self, status: StatusBar, event: Event) -> None:
         if event.kind == EventKind.SESSION_START:

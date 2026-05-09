@@ -92,10 +92,7 @@ class FeedLog(RichLog):
         text = ev.text.strip()
         if not text:
             return
-        try:
-            self.write(Markdown(text))
-        except Exception:
-            self.write(Text(text, style="white"))
+        self.write(Text(text, style="white"))
         self.write("")
 
     def _render_session_end(self, ev: SessionEndEvent) -> None:
