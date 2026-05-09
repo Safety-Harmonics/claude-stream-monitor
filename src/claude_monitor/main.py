@@ -25,12 +25,12 @@ def _stream_stdin(app: MonitorApp) -> None:
         for line in sys.stdin:
             line = line.rstrip("\n")
             if line:
-                app.call_from_thread(app.ingest_line, line)
+                try:
+                    app.call_from_thread(app.ingest_line, line)
+                except RuntimeError:
+                    break  # App stopped — exit cleanly
     except (KeyboardInterrupt, EOFError):
         pass
-    finally:
-        # Signal session end after stdin closes
-        app.call_from_thread(app.ingest_line, '{"type":"result","subtype":"success","result":"stdin closed","total_cost_usd":0}')
 
 
 @click.command()
@@ -77,7 +77,6 @@ def main(
 
         cat logs/agent-20260509.jsonl | claude-monitor --replay
     """
-    # Resolve log path
     resolved_log: Path | None = None
     if not no_log:
         if log_file:
@@ -89,7 +88,6 @@ def main(
 
     app = MonitorApp(log_path=resolved_log, replay=replay)
 
-    # Stream stdin in a background thread so the TUI event loop stays responsive
     t = threading.Thread(target=_stream_stdin, args=(app,), daemon=True)
     t.start()
 
