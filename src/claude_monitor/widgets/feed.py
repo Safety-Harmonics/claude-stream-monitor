@@ -1,34 +1,30 @@
 """
-Tool call feed widget — scrollable log of tool calls and Claude text,
-styled to resemble Claude Code's TUI output.
+Tool call feed widget — scrollable log of tool calls and Claude text.
 """
 
 from __future__ import annotations
 
-from textual.app import ComposeResult
 from textual.widgets import RichLog
 from rich.text import Text
-from rich.syntax import Syntax
-from rich.panel import Panel
 from rich.markdown import Markdown
 
 from claude_monitor.parser import (
-    Event, EventKind, TextEvent, ToolStartEvent, ToolResultEvent, SessionEndEvent
+    Event, EventKind, TextEvent, ToolStartEvent, ToolResultEvent, SessionEndEvent,
 )
 
 TOOL_COLORS = {
-    "Bash":   "bold cyan",
-    "Read":   "bold blue",
-    "Write":  "bold yellow",
-    "Edit":   "bold yellow",
-    "Grep":   "bold magenta",
-    "Glob":   "bold magenta",
-    "Agent":  "bold green",
-    "WebFetch": "bold blue",
+    "Bash":      "bold cyan",
+    "Read":      "bold blue",
+    "Write":     "bold yellow",
+    "Edit":      "bold yellow",
+    "Grep":      "bold magenta",
+    "Glob":      "bold magenta",
+    "Agent":     "bold green",
+    "WebFetch":  "bold blue",
     "WebSearch": "bold blue",
 }
 
-MAX_RESULT_LINES = 20  # truncate long tool results in display
+MAX_RESULT_LINES = 20
 
 
 class FeedLog(RichLog):
@@ -42,11 +38,6 @@ class FeedLog(RichLog):
         scrollbar-size: 1 1;
     }
     """
-
-    def on_mount(self) -> None:
-        self.highlight = True
-        self.markup = True
-        self.auto_scroll = True
 
     def push_event(self, event: Event) -> None:
         if event.kind == EventKind.TOOL_START:
@@ -64,11 +55,9 @@ class FeedLog(RichLog):
         label.append("⏺ ", style=color)
         label.append(ev.name, style=color)
 
-        # Render the primary input field inline
         inp = ev.input
         if ev.name == "Bash" and "command" in inp:
             cmd = inp["command"]
-            # Truncate long commands
             display = cmd[:120] + "…" if len(cmd) > 120 else cmd
             label.append(f"({display})", style="dim")
         elif ev.name in ("Read", "Write", "Edit") and "file" in inp:
@@ -84,8 +73,7 @@ class FeedLog(RichLog):
 
         lines = ev.content.splitlines()
         truncated = len(lines) > MAX_RESULT_LINES
-        display_lines = lines[:MAX_RESULT_LINES]
-        display = "\n".join(display_lines)
+        display = "\n".join(lines[:MAX_RESULT_LINES])
         if truncated:
             display += f"\n… ({len(lines) - MAX_RESULT_LINES} more lines)"
 
@@ -98,13 +86,12 @@ class FeedLog(RichLog):
             result.append(display, style="dim")
 
         self.write(result)
-        self.write("")  # spacing
+        self.write("")
 
     def _render_text(self, ev: TextEvent) -> None:
         text = ev.text.strip()
         if not text:
             return
-        # Render as markdown for Claude's prose responses
         try:
             self.write(Markdown(text))
         except Exception:
@@ -113,8 +100,6 @@ class FeedLog(RichLog):
 
     def _render_session_end(self, ev: SessionEndEvent) -> None:
         self.write("")
-        t = Text()
-        t.append("━" * 60, style="dim")
-        self.write(t)
+        self.write(Text("━" * 60, style="dim"))
         result_text = ev.result[:200] if ev.result else "Session complete"
         self.write(Text(f"Session ended: {result_text}", style="bold green"))

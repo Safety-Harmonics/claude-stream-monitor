@@ -9,8 +9,7 @@ from pathlib import Path
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.widgets import Footer, Header, Static
-from textual.containers import Vertical
+from textual.widgets import Footer, Header, Static, RichLog
 from textual.reactive import reactive
 from rich.text import Text
 
@@ -32,15 +31,6 @@ PHASE_COLORS = {
 class StatusBar(Static):
     """Top status bar: phase | ticket | session | elapsed | cost."""
 
-    phase_num:     reactive[str]   = reactive("—")
-    phase_label:   reactive[str]   = reactive("Waiting for session…")
-    ticket:        reactive[str]   = reactive("")
-    session_id:    reactive[str]   = reactive("")
-    elapsed:       reactive[float] = reactive(0.0)
-    cost:          reactive[float] = reactive(0.0)
-    input_tokens:  reactive[int]   = reactive(0)
-    output_tokens: reactive[int]   = reactive(0)
-
     DEFAULT_CSS = """
     StatusBar {
         height: 2;
@@ -51,42 +41,48 @@ class StatusBar(Static):
     }
     """
 
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._phase_num    = "—"
+        self._phase_label  = "Waiting for session…"
+        self._ticket       = ""
+        self._session_id   = ""
+        self._elapsed      = 0.0
+        self._cost         = 0.0
+        self._input_tokens  = 0
+        self._output_tokens = 0
+
+    def update_state(self, **kwargs) -> None:
+        for k, v in kwargs.items():
+            setattr(self, f"_{k}", v)
+        self.refresh()
+
     def render(self) -> Text:
-        color = PHASE_COLORS.get(self.phase_num, "white")
+        color = PHASE_COLORS.get(self._phase_num, "white")
         t = Text(no_wrap=True, overflow="ellipsis")
 
         t.append(" ◆ ", style=f"bold {color}")
-        t.append(f"Phase {self.phase_num}", style=f"bold {color}")
-        t.append(f"  {self.phase_label}", style=color)
+        t.append(f"Phase {self._phase_num}", style=f"bold {color}")
+        t.append(f"  {self._phase_label}", style=color)
 
-        if self.ticket:
+        if self._ticket:
             t.append("   │   ", style="dim")
-            t.append(self.ticket, style="bold yellow")
+            t.append(self._ticket, style="bold yellow")
 
-        if self.session_id:
+        if self._session_id:
             t.append("   │   ", style="dim")
-            t.append(f"session:{self.session_id[:8]}…", style="dim")
+            t.append(f"session:{self._session_id[:8]}…", style="dim")
 
         t.append("   │   ", style="dim")
-        elapsed = int(self.elapsed)
+        elapsed = int(self._elapsed)
         h, m, s = elapsed // 3600, (elapsed % 3600) // 60, elapsed % 60
         t.append(f"{h:02d}:{m:02d}:{s:02d}", style="dim")
 
         t.append("   │   ", style="dim")
-        t.append(f"${self.cost:.4f}", style="bold green")
-        t.append(f"  ↑{self.input_tokens:,} ↓{self.output_tokens:,}", style="dim")
+        t.append(f"${self._cost:.4f}", style="bold green")
+        t.append(f"  ↑{self._input_tokens:,} ↓{self._output_tokens:,}", style="dim")
 
         return t
-
-    # Watch methods trigger re-render when any reactive changes
-    def watch_phase_num(self, _: str)     -> None: self.refresh()
-    def watch_phase_label(self, _: str)   -> None: self.refresh()
-    def watch_ticket(self, _: str)        -> None: self.refresh()
-    def watch_session_id(self, _: str)    -> None: self.refresh()
-    def watch_elapsed(self, _: float)     -> None: self.refresh()
-    def watch_cost(self, _: float)        -> None: self.refresh()
-    def watch_input_tokens(self, _: int)  -> None: self.refresh()
-    def watch_output_tokens(self, _: int) -> None: self.refresh()
 
 
 class MonitorApp(App):
@@ -94,8 +90,16 @@ class MonitorApp(App):
 
     TITLE = "Claude Stream Monitor"
     CSS = """
-    Screen { background: $background; }
-    #feed-container { height: 1fr; }
+    Screen {
+        background: $background;
+        layers: base;
+    }
+    #feed {
+        height: 1fr;
+        border: none;
+        padding: 0 1;
+        scrollbar-size: 1 1;
+    }
     """
 
     BINDINGS = [
@@ -118,8 +122,7 @@ class MonitorApp(App):
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
         yield StatusBar(id="status")
-        with Vertical(id="feed-container"):
-            yield FeedLog(id="feed", highlight=True, markup=True)
+        yield FeedLog(id="feed")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -133,7 +136,8 @@ class MonitorApp(App):
             self._log_file.close()
 
     def _tick_elapsed(self) -> None:
-        self.query_one("#status", StatusBar).elapsed = time.monotonic() - self._start_time
+        status = self.query_one("#status", StatusBar)
+        status.update_state(elapsed=time.monotonic() - self._start_time)
 
     def ingest_line(self, line: str) -> None:
         if self._log_file:
@@ -153,24 +157,24 @@ class MonitorApp(App):
     def _apply_status(self, status: StatusBar, event: Event) -> None:
         if event.kind == EventKind.SESSION_START:
             ev: SessionStartEvent = event  # type: ignore
-            status.session_id = ev.session_id
+            status.update_state(session_id=ev.session_id)
             self._start_time = time.monotonic()
         elif event.kind == EventKind.PHASE_CHANGE:
             ev: PhaseChangeEvent = event  # type: ignore
-            status.phase_num   = ev.phase_number
-            status.phase_label = ev.phase_label
+            status.update_state(phase_num=ev.phase_number, phase_label=ev.phase_label)
         elif event.kind == EventKind.TICKET_CHANGE:
             ev: TicketChangeEvent = event  # type: ignore
-            status.ticket = ev.ticket_id
+            status.update_state(ticket=ev.ticket_id)
         elif event.kind == EventKind.COST_UPDATE:
             ev: CostUpdateEvent = event  # type: ignore
-            status.cost          = ev.total_cost_usd
-            status.input_tokens  = ev.input_tokens
-            status.output_tokens = ev.output_tokens
+            status.update_state(
+                cost=ev.total_cost_usd,
+                input_tokens=ev.input_tokens,
+                output_tokens=ev.output_tokens,
+            )
         elif event.kind == EventKind.SESSION_END:
             ev: SessionEndEvent = event  # type: ignore
-            status.cost        = ev.total_cost_usd
-            status.phase_label = "Complete"
+            status.update_state(cost=ev.total_cost_usd, phase_label="Complete")
 
     def action_toggle_autoscroll(self) -> None:
         feed = self.query_one("#feed", FeedLog)
