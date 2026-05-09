@@ -23,4 +23,9 @@ packages = ["src/claude_monitor"]
 [tool.uv]
 dev-dependencies = [
     "textual-dev>=0.80.0",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
 ]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
